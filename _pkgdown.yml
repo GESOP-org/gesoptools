@@ -42,10 +42,21 @@ reference:
     desc: "Exportar un estudio a fichero SPSS (.sav) o Excel (.xlsx)."
     contents:
       - export_integra
+      - export_incidencias_rechazadas
   - title: "Carga de datos"
     desc: "Cargar datos de un estudio directamente en R con el contrato unificado."
     contents:
       - load_integra_study
+  - title: "Herramientas para trabajar en R"
+    desc: "Carga con multiples separadas y utilidades de analisis sobre los datos cargados."
+    contents:
+      - load_integra_r
+      - split_multiples
+      - consultar_incidencias_rechazadas
+  - title: "Metricas de campo"
+    desc: "Indicadores de trabajo de campo calculados sobre los datos cargados en R."
+    contents:
+      - calc_loi
   - title: "Utilidades SPSS"
     desc: "Aplicar un diccionario de variables revisado a un fichero SPSS existente."
     contents:
