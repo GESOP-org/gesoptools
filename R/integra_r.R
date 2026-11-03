@@ -9,6 +9,7 @@
 #   split_multiples(estudio$data, estudio$metadata$codebook)
 #   consultar_incidencias_rechazadas("1877_bici_cat_cawi", db_config)
 #   calc_loi(estudio$data)
+#   crear_libros_codigos("1877_bici_cat_cawi", db_config, "libros")
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -449,4 +450,124 @@ calc_loi <- function(data,
   dplyr::bind_rows(resumen) |>
     dplyr::select(dplyr::all_of(c("variable", by, "n", "media_seg",
                                   "mediana_seg", "media_min", "mediana_min")))
+}
+
+
+# -----------------------------------------------------------------------------
+# Codificacion de semiabiertas
+# -----------------------------------------------------------------------------
+
+#' Crea los libros de codigos de las preguntas semiabiertas
+#'
+#' Una pregunta semiabierta tiene la opcion 95 ("Altres") en el codebook y una
+#' variable asociada con sufijo `_O` con el texto de esa opcion. Para cada una
+#' crea un Excel `codif_auto_<VARIABLE>.xlsx` (con el nombre de la variable tal
+#' cual) en `dir` con dos pestanas:
+#' `EXEMPLES` (solo cabeceras) y `LLIBRE DE CODIS`, que se rellena con los
+#' codigos y etiquetas de la variable, la variable de literales (`<VAR>_O`), el
+#' codigo a sustituir (95) y el tipo (`simple` o `multiple`). `LLINDAR` y
+#' `CONTEXT` quedan vacios. Si ya existe un archivo con ese nombre no se
+#' sobrescribe: se crea con el sufijo `_1`, `_2`...
+#'
+#' Las multiples se detectan en los datos sin dividir (valores con `sep`), por
+#' lo que una multiple en la que nadie marco mas de una opcion se trata como
+#' simple.
+#'
+#' @param study_id  Identificador del estudio
+#' @param db_config Lista con host, port, user, password, dbname. Por defecto
+#'   se lee de las variables `INTEGRA_*` con [db_config_from_env()]
+#' @param dir       Carpeta de salida (se crea si no existe)
+#' @param sep       Separador de codigos en las multiples
+#' @param ...       Argumentos de [load_integra_study()]: `valid_states`,
+#'   `idioma`, `clean_html`, `clean_instructions` y `ns_nc_recode`
+#'
+#' @return Invisible: vector con las rutas de los archivos creados.
+#' @export
+crear_libros_codigos <- function(study_id, db_config = db_config_from_env(),
+                                 dir, sep = ";", ...) {
+  estudio  <- .cargar_estudio_r(study_id, db_config, ...)
+  semi     <- .detectar_semiabiertas(estudio$data, estudio$metadata$codebook)
+  multiples <- .detectar_multiples(estudio$data, estudio$metadata$codebook, sep)
+
+  if (length(semi) == 0) {
+    message("[crear_libros_codigos] No hay preguntas semiabiertas en ", study_id)
+    return(invisible(character(0)))
+  }
+
+  dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+
+  rutas <- vapply(semi, function(v) {
+    libro <- .libro_codigos(v, estudio$metadata$codebook,
+                            tipo = if (v %in% multiples) "multiple" else "simple")
+    ruta <- .ruta_libro_libre(dir, v)
+    .escribir_libro_codigos(libro, ruta)
+    ruta
+  }, character(1))
+
+  message("[crear_libros_codigos] ", length(rutas), " archivos en: ", dir)
+  invisible(unname(rutas))
+}
+
+
+# Variables con la opcion 95 en el codebook y la columna <VAR>_O en los datos
+.detectar_semiabiertas <- function(data, codebook) {
+  con_95 <- unique(codebook$nomvar[as.character(codebook$value) == "95"])
+  con_95[paste0(con_95, "_O") %in% names(data)]
+}
+
+
+# Contenido de la pestana LLIBRE DE CODIS de una variable
+.libro_codigos <- function(v, codebook, tipo) {
+  cb <- codebook[codebook$nomvar == v, ]
+  cb <- cb[order(suppressWarnings(as.numeric(cb$value))), ]
+  n  <- nrow(cb)
+  # Las columnas de variable solo llevan valor en la primera fila
+  primera <- function(x) c(x, rep(NA, n - 1))
+
+  data.frame(
+    ETIQUETA                = as.character(cb$label),
+    CODI                    = suppressWarnings(as.numeric(cb$value)),
+    VARIABLES_PER_CODIFICAR = primera(v),
+    VARIABLES_LITERALS      = primera(paste0(v, "_O")),
+    SUBSTITUIR_CODI         = primera(95),
+    TIPUS                   = primera(tipo),
+    LLINDAR                 = NA,
+    CONTEXT                 = NA,
+    stringsAsFactors = FALSE
+  )
+}
+
+
+.escribir_libro_codigos <- function(libro, ruta) {
+  wb <- openxlsx::createWorkbook()
+  estilo <- openxlsx::createStyle(textDecoration = "bold")
+
+  openxlsx::addWorksheet(wb, "EXEMPLES")
+  openxlsx::writeData(wb, "EXEMPLES",
+                      data.frame(REGISTRO = character(), VARIABLE = character(),
+                                 LITERAL = character(),
+                                 `Predicted Category` = character(),
+                                 CODI = character(), check.names = FALSE),
+                      headerStyle = estilo)
+
+  openxlsx::addWorksheet(wb, "LLIBRE DE CODIS")
+  openxlsx::writeData(wb, "LLIBRE DE CODIS", libro, headerStyle = estilo)
+
+  openxlsx::saveWorkbook(wb, ruta, overwrite = FALSE)
+}
+
+
+# Ruta codif_auto_<VAR>.xlsx; si ya existe, anade _1, _2... para no sobrescribir
+.ruta_libro_libre <- function(dir, v) {
+  base <- file.path(dir, paste0("codif_auto_", v))
+  ruta <- paste0(base, ".xlsx")
+  i <- 0L
+  while (file.exists(ruta)) {
+    i <- i + 1L
+    ruta <- paste0(base, "_", i, ".xlsx")
+  }
+  if (i > 0L)
+    message("[crear_libros_codigos] ", v, ": ya existia el archivo; se crea ",
+            basename(ruta))
+  ruta
 }

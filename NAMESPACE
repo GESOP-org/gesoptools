@@ -3,6 +3,7 @@
 export(apply_variables_dict)
 export(calc_loi)
 export(consultar_incidencias_rechazadas)
+export(crear_libros_codigos)
 export(db_config_from_env)
 export(export_incidencias_rechazadas)
 export(export_integra)

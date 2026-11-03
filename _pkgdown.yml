@@ -53,6 +53,7 @@ reference:
       - load_integra_r
       - split_multiples
       - consultar_incidencias_rechazadas
+      - crear_libros_codigos
   - title: "Metricas de campo"
     desc: "Indicadores de trabajo de campo calculados sobre los datos cargados en R."
     contents:
